@@ -4,6 +4,8 @@ import cv2
 cap = cv2.VideoCapture(0)
 lower_range = np.array([85, 100, 50])
 upper_range = np.array([150, 255, 255])
+cameraOrientation = True
+keepDistanceToLine = 200
 
 
 def contourSize(e):
@@ -40,25 +42,47 @@ while True:
 
     # Our operations on the frame come here
     rgb = frame
-    hsv = cv2.cvtColor(frame, cv2.cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, lower_range, upper_range)
-    mask = cv2.GaussianBlur(mask, (11, 11), cv2.BORDER_DEFAULT)
-    success, thresh = cv2.threshold(mask, 127, 255, 0)
-    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    contourIm = np.zeros_like(rgb)
-    if len(contours) >= 2:
+    hsv = cv2.cvtColor(frame, cv2.cv2.COLOR_BGR2HSV)  # convert the frame to HSV color space
+    mask = cv2.inRange(hsv, lower_range, upper_range)  # create mask for blue color
+    mask = cv2.GaussianBlur(mask, (11, 11), cv2.BORDER_DEFAULT)  # blur the mask for better reading
+    success, thresh = cv2.threshold(mask, 127, 255, 0)  # create threshold map from mask
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)  # calculate the contours
+    contourIm = np.zeros_like(rgb)  # create empty mask
+    if len(contours) > 0:  # if we found contours...
         guides = []
-        contours.sort(reverse=True, key=contourSize)
-        for i in range(len(contours)):
+        contours.sort(reverse=True, key=contourSize)  # sort the contours by area
+        for i in range(len(contours)):  # loop trough all contours
             c = contours[i]
-            if cv2.contourArea(c) <= 300:
+            if cv2.contourArea(c) <= 300:  # discard contour if its too small
                 continue
             else:
+                # create a rectangle from the contour
                 rect = cv2.minAreaRect(c)
                 box = cv2.boxPoints(rect)
                 box = np.int0(box)
                 cv2.drawContours(contourIm, [box], 0, (0, 0, 255), 2)
-                guides.append(rect)
+                guides.append(rect)  # and add it to the guides
+        if len(guides) == 1:  # if there is only one contour that qualifies as guide, e.g. on the edges
+            guide = guides[0]
+            if checkVertical(guide) is cameraOrientation:  # check if the contour is a stop or not
+                centerGuide = findCenter(guide)  # find the center of the guide
+                width = frame.shape[1]  # get screen width
+                leftGuide = centerGuide[0] < width / 2  # check whether the guide is left side or right side
+                distance = abs(centerGuide[0] - width / 2)  # get distance to center from guide
+                if leftGuide:
+                    if distance > keepDistanceToLine:
+                        goLeft()
+                    else:
+                        goRight()
+                    cv2.circle(contourIm, (int(centerGuide[0] + keepDistanceToLine), int(frame.shape[0] / 2)), 8,
+                               (0, 0, 255), 2)  # draw a circle at the robots position
+                else:
+                    if distance < keepDistanceToLine:
+                        goLeft()
+                    else:
+                        goRight()
+                    cv2.circle(contourIm, (int(centerGuide[0] - keepDistanceToLine), int(frame.shape[0] / 2)), 8,
+                               (0, 0, 255), 2)  # draw a circle at the robots position
         if len(guides) >= 2:
             useBothGuides = bordersFound = True
             guideLeft = guides[0]
@@ -78,10 +102,12 @@ while True:
                 distToCenter = 0
                 if centerGuideLeft[0] < width / 2:
                     distToCenter = width / 2 - centerGuideLeft[0]
-                    cv2.circle(contourIm, (int(centerGuideLeft[0] + distance / 2), int(frame.shape[0] / 2)), 8, (0, 0, 255), 2)
+                    cv2.circle(contourIm, (int(centerGuideLeft[0] + distance / 2), int(frame.shape[0] / 2)), 8,
+                               (0, 0, 255), 2)
                 else:
                     distToCenter = width / 2 - centerGuideRight[0]
-                    cv2.circle(contourIm, (int(centerGuideRight[0] + distance / 2), int(frame.shape[0] / 2)), 8, (0, 0, 255), 2)
+                    cv2.circle(contourIm, (int(centerGuideRight[0] + distance / 2), int(frame.shape[0] / 2)), 8,
+                               (0, 0, 255), 2)
 
                 if distToCenter > distance / 2:
                     goLeft()
