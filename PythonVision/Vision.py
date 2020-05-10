@@ -1,5 +1,7 @@
 import numpy as np
 import cv2
+import Transform
+
 
 cap = cv2.VideoCapture(0)
 lower_range = np.array([85, 100, 50])
@@ -40,14 +42,14 @@ def singleGuide(guide):
             goLeft()
         else:
             goRight()
-        cv2.circle(contourIm, (int(centerGuide[0] + keepDistanceToLine), int(frame.shape[0] / 2)), 8,
+        cv2.circle(robotVision, (int(centerGuide[0] + keepDistanceToLine), int(frame.shape[0] / 2)), 8,
                    (0, 0, 255), 2)  # draw a circle at the robots position
     else:
         if distance < keepDistanceToLine:
             goLeft()
         else:
             goRight()
-        cv2.circle(contourIm, (int(centerGuide[0] - keepDistanceToLine), int(frame.shape[0] / 2)), 8, (0, 0, 255), 2)
+        cv2.circle(robotVision, (int(centerGuide[0] - keepDistanceToLine), int(frame.shape[0] / 2)), 8, (0, 0, 255), 2)
 
 
 def multipleGuides(guideLeft, guideRight):
@@ -57,16 +59,29 @@ def multipleGuides(guideLeft, guideRight):
     distToCenter = 0
     if centerGuideLeft[0] < width / 2:
         distToCenter = width / 2 - centerGuideLeft[0]
-        cv2.circle(contourIm, (int(centerGuideLeft[0] + distance / 2), int(frame.shape[0] / 2)), 8,
+        cv2.circle(robotVision, (int(centerGuideLeft[0] + distance / 2), int(frame.shape[0] / 2)), 8,
                    (0, 0, 255), 2)
     else:
         distToCenter = width / 2 - centerGuideRight[0]
-        cv2.circle(contourIm, (int(centerGuideRight[0] + distance / 2), int(frame.shape[0] / 2)), 8,
+        cv2.circle(robotVision, (int(centerGuideRight[0] + distance / 2), int(frame.shape[0] / 2)), 8,
                    (0, 0, 255), 2)
     if distToCenter > distance / 2:
         goLeft()
     elif distToCenter < distance / 2:
         goRight()
+    m_boxLeft = cv2.boxPoints(guideLeft)
+    m_boxLeft = np.int0(m_boxLeft)
+    ptsLeftRect = Transform.order_points(m_boxLeft)
+    m_boxRight = cv2.boxPoints(guideRight)
+    m_boxRight = np.int0(m_boxRight)
+    ptsRightRect = Transform.order_points(m_boxRight)
+    setWarp(ptsLeftRect[0], ptsLeftRect[3], ptsRightRect[1], ptsRightRect[2])
+
+
+def setWarp(c1, c2, c3, c4):
+    pts = np.array([(c1[0], c1[1]), (c2[0], c2[1]), (c3[0], c3[1]), (c4[0], c4[1])])
+    global robotVision
+    robotVision = Transform.four_point_transform(contourIm, pts)
 
 
 def checkVertical(con):
@@ -133,29 +148,17 @@ while True:
                         guidesLeft.append(guide)
                     else:
                         guidesRight.append(guide)
-                guidesLeft.sort(inverse=True, key=rectSize)
-                guidesRight.sort(inverse=True, key=rectSize)
+                guidesLeft.sort(reverse=True, key=rectSize)
+                guidesRight.sort(reverse=True, key=rectSize)
                 if len(guidesLeft) > 0 and len(guidesRight) > 0:
                     print("Both guides found")
                     multipleGuides(guidesLeft[0], guidesRight[0])
-                    boxLeft = cv2.boxPoints(guidesLeft[0])
-                    boxLeft = np.int0(boxLeft)
-                    cv2.drawContours(robotVision, [boxLeft], 0, (0, 0, 255), 2)
-                    boxRight = cv2.boxPoints(guidesRight[0])
-                    boxRight = np.int0(boxRight)
-                    cv2.drawContours(robotVision, [boxRight], 0, (0, 0, 255), 2)
                 elif len(guidesLeft) > 0:
                     print("Only left found")
                     singleGuide(guidesLeft[0])
-                    boxLeft = cv2.boxPoints(guidesLeft[0])
-                    boxLeft = np.int0(boxLeft)
-                    cv2.drawContours(robotVision, [boxLeft], 0, (0, 0, 255), 2)
                 else:
                     print("Only right found")
                     singleGuide(guidesRight[0])
-                    boxRight = cv2.boxPoints(guidesRight[0])
-                    boxRight = np.int0(boxRight)
-                    cv2.drawContours(robotVision, [boxRight], 0, (0, 0, 255), 2)
 
             # Display the resulting frame
 
