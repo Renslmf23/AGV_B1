@@ -3,9 +3,10 @@ from tkinter.colorchooser import askcolor
 import cv2
 import PIL.Image, PIL.ImageTk
 import time
-from Vision import VisionHandler
+from Vision2 import VisionHandler
 import numpy as np
 import colorsys
+import datetime
 import os
 
 
@@ -62,8 +63,10 @@ class App:
         # define the color variables for Vision
         self.lower_range = np.array([85, 100, 50])
         self.upper_range = np.array([150, 255, 255])
+        self.distance = 50
         self.read_defaults()
 
+        self.frames = []
 
         # After it is called once, the update method will be automatically called every delay milliseconds
         self.delay = 15
@@ -101,6 +104,9 @@ class App:
         self.upper_range = np.array([150, 255, 255])
         self.update_defaults()
 
+    def update_slider(self, event):
+        self.distance = self.distance_slider.get()
+
     def open_settings(self):
         if self.settingsOpen:
             return
@@ -115,11 +121,15 @@ class App:
 
             reset_button = tkinter.Button(self.settings, text="Reset defaults", command=self.reset_defaults)
             reset_button.grid(column=0, row=1)
+            self.distance_slider = tkinter.Scale(self.settings, from_=0, to=200, orient=tkinter.HORIZONTAL, command=self.update_slider)
+            self.distance_slider.set(self.distance)
+            self.distance_slider.grid(column=0, row=2)
 
             ok_button = tkinter.Button(self.settings, text="Ok", command=lambda *args: self.close_settings(True))
-            cancel_button = tkinter.Button(self.settings, text="Cancel", command=lambda *args: self.close_settings(False))
-            ok_button.grid(column=0, row=2)
-            cancel_button.grid(column=1, row=2)
+            cancel_button = tkinter.Button(self.settings, text="Cancel",
+                                           command=lambda *args: self.close_settings(False))
+            ok_button.grid(column=0, row=3)
+            cancel_button.grid(column=1, row=3)
             self.settings.lift()
 
     def snapshot(self):
@@ -132,18 +142,23 @@ class App:
 
     def update(self):
         # Get a frame from the video source
-        ret, frame = self.cap.update(lower_range=self.lower_range, upper_range=self.upper_range,
-                                     requested_frame=self.current_output)  #
+        ret, self.frames = self.cap.update(lower_range=self.lower_range, upper_range=self.upper_range, go_left_size=self.distance)  #
         if ret:
             if self.current_output > 3:
                 self.photos = []
                 for i in range(4):
-                    # frame[i] = cv2.resize(frame[i], (int(frame[i].shape[1] / 2), int(frame[i].shape[0] / 2)))
-                    self.photos.append(PIL.ImageTk.PhotoImage(master=self.canvas, image=PIL.Image.fromarray(frame[i])))
-                    x, y = divmod(i, 2)
-                    self.canvas.create_image(x * frame[i].shape[1], y * frame[i].shape[0], image=self.photos[i],
-                                             anchor=tkinter.NW)
+                    if self.frames[i] is not None:
+                        self.frames[i] = cv2.resize(self.frames[i],
+                                                    (int(self.frames[0].shape[1]), int(self.frames[0].shape[0])))
+                        self.photos.append(
+                            PIL.ImageTk.PhotoImage(master=self.canvas, image=PIL.Image.fromarray(self.frames[i])))
+                        x, y = divmod(i, 2)
+
+                        self.canvas.create_image(x * self.frames[0].shape[1], y * self.frames[0].shape[0],
+                                                 image=self.photos[i],
+                                                 anchor=tkinter.NW)
             else:
+                frame = self.frames[self.current_output]
                 frame = cv2.resize(frame, (int(frame.shape[1] * 2), int(frame.shape[0] * 2)))
                 self.photo = PIL.ImageTk.PhotoImage(master=self.canvas, image=PIL.Image.fromarray(frame))
                 self.canvas.create_image(0, 0, image=self.photo, anchor=tkinter.NW)
@@ -168,22 +183,37 @@ class App:
             upper_range_default = upper_range_default.split(",")
             self.upper_range = np.array(
                 [int(upper_range_default[0]), int(upper_range_default[1]), int(upper_range_default[2])])
+            distance_default = lines[3]
+            distance_default = distance_default.split(":")
+            distance_default = distance_default[1].strip()
+            distance_default = distance_default.replace(" ", "")
+            self.distance = int(distance_default)
             textFile.close()
 
         except FileNotFoundError:
             self.update_defaults()
         except IndexError:
+            textFile.close()
             self.update_defaults()
 
     def update_defaults(self):
         print("Updating defaults")
+        timeStamp = datetime.datetime.now().strftime("%b-%d-%y-%H%M%S")
+        fileName = "config_{}.txt".format(timeStamp)
+        print(fileName)
+        textFileBackup = open(fileName, "w+")
         textFile = open("config.txt", "w+")
+        textFileBackup.writelines([l for l in textFile.readlines()])
+        textFileBackup.close()
         textFile.write("DO NOT MODIFY THIS FILE UNLESS YOU KNOW WHAT YOU ARE DOING! \n")
-        lower_range_string = "Lower range: {}, {}, {} \n".format(self.lower_range[0], self.lower_range[1], self.lower_range[2])
+        lower_range_string = "Lower range: {}, {}, {} \n".format(self.lower_range[0], self.lower_range[1],
+                                                                 self.lower_range[2])
         upper_range_string = "Upper range: {}, {}, {} \n".format(self.upper_range[0], self.upper_range[1],
                                                                  self.upper_range[2])
+        distance_string = "Distance: {} \n".format(self.distance)
         textFile.write(lower_range_string)
         textFile.write(upper_range_string)
+        textFile.write(distance_string)
         textFile.close()
 
 
