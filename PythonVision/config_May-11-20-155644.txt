@@ -1,0 +1,4 @@
+DO NOT MODIFY THIS FILE UNLESS YOU KNOW WHAT YOU ARE DOING! 
+Lower range: 96, 131, 95 
+Upper range: 150, 255, 255 
+Distance: 44 

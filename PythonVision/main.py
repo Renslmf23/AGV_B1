@@ -61,8 +61,10 @@ class App:
         self.btn_snapshot.pack(anchor=tkinter.CENTER, expand=True)
 
         # define the color variables for Vision
-        self.lower_range = np.array([85, 100, 50])
-        self.upper_range = np.array([150, 255, 255])
+        self.lower_range_guide = np.array([85, 100, 50])
+        self.upper_range_guide = np.array([150, 255, 255])
+        self.lower_range_tree = np.array([85, 100, 50])
+        self.upper_range_tree = np.array([150, 255, 255])
         self.distance = 50
         self.read_defaults()
 
@@ -80,14 +82,22 @@ class App:
     def quit(self):
         self.window.destroy()
 
-    def color_picker_min(self):
-        color = askcolor(initialcolor=tuple(hsvtorgb(self.lower_range)))[0]
-        self.lower_range = rgbtohsv(color)
+    def color_picker_min(self, frame):
+        if frame == 0:
+            color = askcolor(initialcolor=tuple(hsvtorgb(self.lower_range_guide)))[0]
+            self.lower_range_guide = rgbtohsv(color)
+        else:
+            color = askcolor(initialcolor=tuple(hsvtorgb(self.lower_range_tree)))[0]
+            self.lower_range_tree = rgbtohsv(color)
         self.settings.lift()
 
-    def color_picker_max(self):
-        color = askcolor(initialcolor=tuple(hsvtorgb(self.upper_range)))[0]
-        self.upper_range = rgbtohsv(color)
+    def color_picker_max(self, frame):
+        if frame == 0:
+            color = askcolor(initialcolor=tuple(hsvtorgb(self.upper_range_guide)))[0]
+            self.upper_range_guide = rgbtohsv(color)
+        else:
+            color = askcolor(initialcolor=tuple(hsvtorgb(self.upper_range_tree)))[0]
+            self.upper_range_tree = rgbtohsv(color)
         self.settings.lift()
 
     def close_settings(self, save):
@@ -100,8 +110,10 @@ class App:
         self.settings.destroy()
 
     def reset_defaults(self):
-        self.lower_range = np.array([85, 100, 50])
-        self.upper_range = np.array([150, 255, 255])
+        self.lower_range_tree = np.array([85, 100, 50])
+        self.upper_range_tree = np.array([150, 255, 255])
+        self.lower_range_guide = self.lower_range_tree
+        self.upper_range_guide = self.upper_range_tree
         self.update_defaults()
 
     def update_slider(self, event):
@@ -114,22 +126,32 @@ class App:
             self.settingsOpen = True
             self.settings = tkinter.Toplevel()
             self.settings.wm_title("Settings")
-            min_range_color = tkinter.Button(self.settings, text="min range", command=self.color_picker_min)
-            max_range_color = tkinter.Button(self.settings, text="max range", command=self.color_picker_max)
+            min_range_color = tkinter.Button(self.settings, text="min range",
+                                             command=lambda *args: self.color_picker_min(0))
+            max_range_color = tkinter.Button(self.settings, text="max range",
+                                             command=lambda *args: self.color_picker_max(0))
             min_range_color.grid(column=0, row=0)
             max_range_color.grid(column=1, row=0)
 
+            min_range_color_tree = tkinter.Button(self.settings, text="min range tree",
+                                                  command=lambda *args: self.color_picker_min(1))
+            max_range_color_tree = tkinter.Button(self.settings, text="max range tree",
+                                                  command=lambda *args: self.color_picker_max(1))
+            min_range_color_tree.grid(column=0, row=1)
+            max_range_color_tree.grid(column=1, row=1)
+
             reset_button = tkinter.Button(self.settings, text="Reset defaults", command=self.reset_defaults)
-            reset_button.grid(column=0, row=1)
-            self.distance_slider = tkinter.Scale(self.settings, from_=0, to=200, orient=tkinter.HORIZONTAL, command=self.update_slider)
+            reset_button.grid(column=0, row=2)
+            self.distance_slider = tkinter.Scale(self.settings, from_=0, to=200, orient=tkinter.HORIZONTAL,
+                                                 command=self.update_slider)
             self.distance_slider.set(self.distance)
-            self.distance_slider.grid(column=0, row=2)
+            self.distance_slider.grid(column=0, row=3)
 
             ok_button = tkinter.Button(self.settings, text="Ok", command=lambda *args: self.close_settings(True))
             cancel_button = tkinter.Button(self.settings, text="Cancel",
                                            command=lambda *args: self.close_settings(False))
-            ok_button.grid(column=0, row=3)
-            cancel_button.grid(column=1, row=3)
+            ok_button.grid(column=0, row=4)
+            cancel_button.grid(column=1, row=4)
             self.settings.lift()
 
     def snapshot(self):
@@ -142,7 +164,11 @@ class App:
 
     def update(self):
         # Get a frame from the video source
-        ret, self.frames = self.cap.update(lower_range=self.lower_range, upper_range=self.upper_range, go_left_size=self.distance)  #
+        ret, self.frames = self.cap.update(lower_range_guide=self.lower_range_guide,
+                                           upper_range_guide=self.upper_range_guide,
+                                           upper_range_tree=self.upper_range_tree,
+                                           lower_range_tree=self.lower_range_tree,
+                                           go_left_size=self.distance)
         if ret:
             if self.current_output > 3:
                 self.photos = []
@@ -169,25 +195,45 @@ class App:
         try:
             textFile = open("config.txt", "r")
             lines = textFile.readlines()
+
             lower_range_default = lines[1]  # first line = warning
             lower_range_default = lower_range_default.split(":")
             lower_range_default = lower_range_default[1].strip()
             lower_range_default = lower_range_default.replace(" ", "")
             lower_range_default = lower_range_default.split(",")
-            self.lower_range = np.array(
+            self.lower_range_guide = np.array(
                 [int(lower_range_default[0]), int(lower_range_default[1]), int(lower_range_default[2])])
+            print(self.lower_range_guide)
+
             upper_range_default = lines[2]  # first line = warning
             upper_range_default = upper_range_default.split(":")
             upper_range_default = upper_range_default[1].strip()
             upper_range_default = upper_range_default.replace(" ", "")
             upper_range_default = upper_range_default.split(",")
-            self.upper_range = np.array(
+            self.upper_range_guide = np.array(
                 [int(upper_range_default[0]), int(upper_range_default[1]), int(upper_range_default[2])])
+
             distance_default = lines[3]
             distance_default = distance_default.split(":")
             distance_default = distance_default[1].strip()
             distance_default = distance_default.replace(" ", "")
             self.distance = int(distance_default)
+
+            lower_range_default = lines[4]  # first line = warning
+            lower_range_default = lower_range_default.split(":")
+            lower_range_default = lower_range_default[1].strip()
+            lower_range_default = lower_range_default.replace(" ", "")
+            lower_range_default = lower_range_default.split(",")
+            self.lower_range_tree = np.array(
+                [int(lower_range_default[0]), int(lower_range_default[1]), int(lower_range_default[2])])
+
+            upper_range_default = lines[5]  # first line = warning
+            upper_range_default = upper_range_default.split(":")
+            upper_range_default = upper_range_default[1].strip()
+            upper_range_default = upper_range_default.replace(" ", "")
+            upper_range_default = upper_range_default.split(",")
+            self.upper_range_tree = np.array(
+                [int(upper_range_default[0]), int(upper_range_default[1]), int(upper_range_default[2])])
             textFile.close()
 
         except FileNotFoundError:
@@ -206,14 +252,24 @@ class App:
         textFileBackup.writelines([l for l in textFile.readlines()])
         textFileBackup.close()
         textFile.write("DO NOT MODIFY THIS FILE UNLESS YOU KNOW WHAT YOU ARE DOING! \n")
-        lower_range_string = "Lower range: {}, {}, {} \n".format(self.lower_range[0], self.lower_range[1],
-                                                                 self.lower_range[2])
-        upper_range_string = "Upper range: {}, {}, {} \n".format(self.upper_range[0], self.upper_range[1],
-                                                                 self.upper_range[2])
+        lower_range_string = "Lower range guide: {}, {}, {} \n".format(self.lower_range_guide[0],
+                                                                       self.lower_range_guide[1],
+                                                                       self.lower_range_guide[2])
+        upper_range_string = "Upper range guide: {}, {}, {} \n".format(self.upper_range_guide[0],
+                                                                       self.upper_range_guide[1],
+                                                                       self.upper_range_guide[2])
         distance_string = "Distance: {} \n".format(self.distance)
+        lower_range_tree_string = "Lower range tree: {}, {}, {} \n".format(self.lower_range_tree[0],
+                                                                           self.lower_range_tree[1],
+                                                                           self.lower_range_tree[2])
+        upper_range_tree_string = "Upper range tree: {}, {}, {} \n".format(self.upper_range_tree[0],
+                                                                           self.upper_range_tree[1],
+                                                                           self.upper_range_tree[2])
         textFile.write(lower_range_string)
         textFile.write(upper_range_string)
         textFile.write(distance_string)
+        textFile.write(lower_range_tree_string)
+        textFile.write(upper_range_tree_string)
         textFile.close()
 
 

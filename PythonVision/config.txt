@@ -1,4 +1,6 @@
 DO NOT MODIFY THIS FILE UNLESS YOU KNOW WHAT YOU ARE DOING! 
-Lower range: 96, 131, 95 
-Upper range: 150, 255, 255 
-Distance: 65 
+Lower range guide: 77, 85, 126 
+Upper range guide: 150, 255, 255 
+Distance: 44 
+Lower range tree: 0, 78, 55 
+Upper range tree: 33, 253, 233 
