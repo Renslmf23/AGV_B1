@@ -8,6 +8,9 @@ import numpy as np
 import colorsys
 import datetime
 import os
+import serial
+
+
 
 
 def rgbtohsv(rgb):
@@ -24,6 +27,7 @@ def hsvtorgb(hsv):
 
 class App:
     settingsOpen = False
+
 
     def __init__(self, window, window_title, video_source=0):
         self.window = window
@@ -65,14 +69,23 @@ class App:
         self.upper_range_guide = np.array([150, 255, 255])
         self.lower_range_tree = np.array([85, 100, 50])
         self.upper_range_tree = np.array([150, 255, 255])
+        self.lower_range_hand = np.array([85, 100, 50])
+        self.upper_range_hand = np.array([150, 255, 255])
         self.distance = 50
         self.read_defaults()
 
         self.frames = []
 
+        self.arduino = serial.Serial('COM4', 115200, timeout=.1)
+
         # After it is called once, the update method will be automatically called every delay milliseconds
         self.delay = 15
+        self.delay_serial = 50
         self.update()
+        self.send_serial()
+        self.read_serial()
+
+
 
         self.window.mainloop()
 
@@ -86,18 +99,24 @@ class App:
         if frame == 0:
             color = askcolor(initialcolor=tuple(hsvtorgb(self.lower_range_guide)))[0]
             self.lower_range_guide = rgbtohsv(color)
-        else:
+        elif frame == 1:
             color = askcolor(initialcolor=tuple(hsvtorgb(self.lower_range_tree)))[0]
             self.lower_range_tree = rgbtohsv(color)
+        else:
+            color = askcolor(initialcolor=tuple(hsvtorgb(self.lower_range_hand)))[0]
+            self.lower_range_hand = rgbtohsv(color)
         self.settings.lift()
 
     def color_picker_max(self, frame):
         if frame == 0:
             color = askcolor(initialcolor=tuple(hsvtorgb(self.upper_range_guide)))[0]
             self.upper_range_guide = rgbtohsv(color)
-        else:
+        elif frame == 1:
             color = askcolor(initialcolor=tuple(hsvtorgb(self.upper_range_tree)))[0]
             self.upper_range_tree = rgbtohsv(color)
+        else:
+            color = askcolor(initialcolor=tuple(hsvtorgb(self.upper_range_hand)))[0]
+            self.upper_range_hand = rgbtohsv(color)
         self.settings.lift()
 
     def close_settings(self, save):
@@ -140,35 +159,50 @@ class App:
             min_range_color_tree.grid(column=0, row=1)
             max_range_color_tree.grid(column=1, row=1)
 
+            min_range_color_hand = tkinter.Button(self.settings, text="min range hand",
+                                                  command=lambda *args: self.color_picker_min(2))
+            max_range_color_hand = tkinter.Button(self.settings, text="max range hand",
+                                                  command=lambda *args: self.color_picker_max(2))
+            min_range_color_hand.grid(column=0, row=2)
+            max_range_color_hand.grid(column=1, row=2)
+
             reset_button = tkinter.Button(self.settings, text="Reset defaults", command=self.reset_defaults)
-            reset_button.grid(column=0, row=2)
+            reset_button.grid(column=0, row=3)
             self.distance_slider = tkinter.Scale(self.settings, from_=0, to=200, orient=tkinter.HORIZONTAL,
                                                  command=self.update_slider)
             self.distance_slider.set(self.distance)
-            self.distance_slider.grid(column=0, row=3)
+            self.distance_slider.grid(column=0, row=4)
 
             ok_button = tkinter.Button(self.settings, text="Ok", command=lambda *args: self.close_settings(True))
             cancel_button = tkinter.Button(self.settings, text="Cancel",
                                            command=lambda *args: self.close_settings(False))
-            ok_button.grid(column=0, row=4)
-            cancel_button.grid(column=1, row=4)
+            ok_button.grid(column=0, row=5)
+            cancel_button.grid(column=1, row=5)
             self.settings.lift()
 
     def snapshot(self):
         # Get a frame from the video source
-        ret, frame = self.cap.update(lower_range=self.lower_range, upper_range=self.upper_range,
-                                     requested_frame=0)  # lower_range=self.lower_range, upper_range=self.upper_range,
+        ranges = [[self.lower_range_guide, self.upper_range_guide], [self.lower_range_tree, self.upper_range_tree],
+                  [self.lower_range_hand, self.upper_range_hand]]
+        ret, frame = self.cap.update(ranges=ranges)  # lower_range=self.lower_range, upper_range=self.upper_range,
 
         if ret:
-            cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+            cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", frame[4])
+
+    def read_serial(self):
+        if self.arduino.inWaiting() > 0:
+            data = self.arduino.read()
+            print(str(data))
+
+    def send_serial(self):
+        send_string = "{}\n".format(self.cap.direction)
+        self.arduino.write(send_string.encode())
+        print(self.cap.direction)
 
     def update(self):
         # Get a frame from the video source
-        ret, self.frames = self.cap.update(lower_range_guide=self.lower_range_guide,
-                                           upper_range_guide=self.upper_range_guide,
-                                           upper_range_tree=self.upper_range_tree,
-                                           lower_range_tree=self.lower_range_tree,
-                                           go_left_size=self.distance)
+        ranges = [[self.lower_range_guide, self.upper_range_guide], [self.lower_range_tree, self.upper_range_tree], [self.lower_range_hand, self.upper_range_hand]]
+        ret, self.frames = self.cap.update(ranges=ranges, go_left_size=self.distance)
         if ret:
             if self.current_output > 3:
                 self.photos = []
@@ -188,7 +222,8 @@ class App:
                 frame = cv2.resize(frame, (int(frame.shape[1] * 2), int(frame.shape[0] * 2)))
                 self.photo = PIL.ImageTk.PhotoImage(master=self.canvas, image=PIL.Image.fromarray(frame))
                 self.canvas.create_image(0, 0, image=self.photo, anchor=tkinter.NW)
-
+        self.read_serial()
+        self.send_serial()
         self.window.after(self.delay, self.update)
 
     def read_defaults(self):
@@ -219,7 +254,7 @@ class App:
             distance_default = distance_default.replace(" ", "")
             self.distance = int(distance_default)
 
-            lower_range_default = lines[4]  # first line = warning
+            lower_range_default = lines[4]
             lower_range_default = lower_range_default.split(":")
             lower_range_default = lower_range_default[1].strip()
             lower_range_default = lower_range_default.replace(" ", "")
@@ -227,12 +262,28 @@ class App:
             self.lower_range_tree = np.array(
                 [int(lower_range_default[0]), int(lower_range_default[1]), int(lower_range_default[2])])
 
-            upper_range_default = lines[5]  # first line = warning
+            upper_range_default = lines[5]
             upper_range_default = upper_range_default.split(":")
             upper_range_default = upper_range_default[1].strip()
             upper_range_default = upper_range_default.replace(" ", "")
             upper_range_default = upper_range_default.split(",")
             self.upper_range_tree = np.array(
+                [int(upper_range_default[0]), int(upper_range_default[1]), int(upper_range_default[2])])
+
+            lower_range_default = lines[6]
+            lower_range_default = lower_range_default.split(":")
+            lower_range_default = lower_range_default[1].strip()
+            lower_range_default = lower_range_default.replace(" ", "")
+            lower_range_default = lower_range_default.split(",")
+            self.lower_range_hand = np.array(
+                [int(lower_range_default[0]), int(lower_range_default[1]), int(lower_range_default[2])])
+
+            upper_range_default = lines[7]
+            upper_range_default = upper_range_default.split(":")
+            upper_range_default = upper_range_default[1].strip()
+            upper_range_default = upper_range_default.replace(" ", "")
+            upper_range_default = upper_range_default.split(",")
+            self.upper_range_hand = np.array(
                 [int(upper_range_default[0]), int(upper_range_default[1]), int(upper_range_default[2])])
             textFile.close()
 
@@ -265,11 +316,19 @@ class App:
         upper_range_tree_string = "Upper range tree: {}, {}, {} \n".format(self.upper_range_tree[0],
                                                                            self.upper_range_tree[1],
                                                                            self.upper_range_tree[2])
+        lower_range_hand_string = "Lower range hand: {}, {}, {} \n".format(self.lower_range_hand[0],
+                                                                           self.lower_range_hand[1],
+                                                                           self.lower_range_hand[2])
+        upper_range_hand_string = "Upper range hand: {}, {}, {} \n".format(self.upper_range_hand[0],
+                                                                           self.upper_range_hand[1],
+                                                                           self.upper_range_hand[2])
         textFile.write(lower_range_string)
         textFile.write(upper_range_string)
         textFile.write(distance_string)
         textFile.write(lower_range_tree_string)
         textFile.write(upper_range_tree_string)
+        textFile.write(lower_range_hand_string)
+        textFile.write(upper_range_hand_string)
         textFile.close()
 
 

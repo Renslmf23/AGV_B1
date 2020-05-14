@@ -1,6 +1,8 @@
 DO NOT MODIFY THIS FILE UNLESS YOU KNOW WHAT YOU ARE DOING! 
-Lower range guide: 77, 85, 126 
+Lower range guide: 91, 89, 97 
 Upper range guide: 150, 255, 255 
-Distance: 44 
-Lower range tree: 0, 78, 55 
-Upper range tree: 33, 253, 233 
+Distance: 56 
+Lower range tree: 0, 24, 41 
+Upper range tree: 21, 253, 143 
+Lower range hand: 0, 39, 122 
+Upper range hand: 25, 77, 175 
