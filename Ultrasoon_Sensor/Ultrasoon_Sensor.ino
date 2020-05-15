@@ -24,7 +24,7 @@ void loop()
   cm = (duration * 0.0343) / 2;
   
   Serial.print(cm);
-  //Serial.print("cm");
+  Serial.print("cm");
   Serial.println();
   
   delay(250);
