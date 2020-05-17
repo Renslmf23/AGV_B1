@@ -1,31 +1,45 @@
-int trigPin = 11;    
-int echoPin = 12;    
-long duration;
-long cm;
- 
-void setup() 
+#define trigPin 4
+#define echoPin 2
+
+volatile unsigned long LastPulseTime;
+int duration;
+
+void setup()
 {
-  Serial.begin (9600);
+  Serial.begin(9600);
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
+
+  attachInterrupt(0, Echo_ISR, CHANGE);
 }
- 
-void loop() 
+
+void loop()
 {
   digitalWrite(trigPin, LOW);
-  delayMicroseconds(5);
+  delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
- 
-  pinMode(echoPin, INPUT);
-  duration = pulseIn(echoPin, HIGH);
- 
-  cm = (duration * 0.0343) / 2;
-  
-  Serial.print(cm);
-  Serial.print("cm");
-  Serial.println();
-  
-  delay(250);
+
+  Serial.print("Sensor");
+  Serial.print(LastPulseTime);
+  Serial.print('\t');
+  Serial.print((LastPulseTime / 2) * 0.0343);                     
+  Serial.println("cm");
+
+  delay(1000);
+}
+
+void Echo_ISR()
+{
+  static unsigned long startTime;
+
+  if (digitalRead(2))
+  {
+    startTime = micros();
+  }
+  else
+  {
+    LastPulseTime = micros() - startTime;
+  }
 }
