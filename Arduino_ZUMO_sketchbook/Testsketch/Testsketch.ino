@@ -26,16 +26,21 @@ void serialEvent() {
     // get the new byte:
     char inChar = (char)Serial.read();
     if (inChar == '\n') {
-      direction = inputString.toInt() * 30;
-
+      timeAtCommand = millis();
+      char identifier = inputString.charAt(0); //read the id from the command
+      inputString.remove(0, 1); //strip the command letter
+      if (identifier == 'D') { //if the command is a directional command
+        direction = inputString.toInt() * 5;
+      } else if (identifier == 'E') { //if the command is a end of field command
+        //do stuff
+      } else if (identifier == 'T') { //if the camera detected a tree
+        //do stuff
+      }
       inputString = "";
     } else {
-    // add it to the inputString:
+      // add it to the inputString:
       inputString += inChar;
     }
-    // if the incoming character is a newline, set a flag so the main loop can
-    // do something about it:
-
   }
-
+}
 }
