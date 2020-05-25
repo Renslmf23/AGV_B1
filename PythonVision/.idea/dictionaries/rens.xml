@@ -2,6 +2,7 @@
   <dictionary name="rens">
     <words>
       <w>menubar</w>
+      <w>websocket</w>
     </words>
   </dictionary>
 </component>

@@ -8,9 +8,8 @@ import numpy as np
 import colorsys
 import datetime
 import os
-import serial
-
-
+from ws4py.client.threadedclient import WebSocketClient
+from threading import *
 
 
 def rgbtohsv(rgb):
@@ -27,15 +26,17 @@ def hsvtorgb(hsv):
 
 class App:
     settingsOpen = False
+    wait_on_command = False
+    end_reached_count = 0
+    tree_detected_count = 0
 
-
-    def __init__(self, window, window_title, video_source=0):
+    def __init__(self, window, window_title, capture, video_source=0):
         self.window = window
         self.window.title(window_title)
         self.video_source = video_source
 
         # open video source (by default this will try to open the computer webcam)
-        self.cap = VisionHandler(self.video_source)
+        self.cap = capture
         self.current_output = 0  # show regular RGB image
 
         # create menu bar
@@ -48,6 +49,8 @@ class App:
         view_menu.add_command(label="view vision", command=lambda *args: self.select_output(3))
         view_menu.add_separator()
         view_menu.add_command(label="view all", command=lambda *args: self.select_output(4))
+        view_menu.add_separator()
+        view_menu.add_command(label="view data", command=self.open_variables)
 
         edit_menu = tkinter.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label="Edit", menu=edit_menu)
@@ -76,16 +79,9 @@ class App:
 
         self.frames = []
 
-        self.arduino = serial.Serial('COM4', 115200, timeout=.1)
-
         # After it is called once, the update method will be automatically called every delay milliseconds
         self.delay = 15
-        self.delay_serial = 50
         self.update()
-        self.send_serial()
-        self.read_serial()
-
-
 
         self.window.mainloop()
 
@@ -95,12 +91,19 @@ class App:
     def quit(self):
         self.window.destroy()
 
+    def open_variables(self):
+        self.variables = tkinter.Toplevel()
+        self.variables.wm_title("Values")
+        self.variables.minsize(width=400, height=400)
+        self.variables.lift()
+
     def color_picker_min(self, frame):
         if frame == 0:
             color = askcolor(initialcolor=tuple(hsvtorgb(self.lower_range_guide)))[0]
             self.lower_range_guide = rgbtohsv(color)
         elif frame == 1:
             color = askcolor(initialcolor=tuple(hsvtorgb(self.lower_range_tree)))[0]
+            print(color)
             self.lower_range_tree = rgbtohsv(color)
         else:
             color = askcolor(initialcolor=tuple(hsvtorgb(self.lower_range_hand)))[0]
@@ -189,19 +192,11 @@ class App:
         if ret:
             cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", frame[4])
 
-    def read_serial(self):
-        if self.arduino.inWaiting() > 0:
-            data = self.arduino.read()
-            print(str(data))
-
-    def send_serial(self):
-        send_string = "{}\n".format(self.cap.direction)
-        self.arduino.write(send_string.encode())
-        print(self.cap.direction)
 
     def update(self):
         # Get a frame from the video source
-        ranges = [[self.lower_range_guide, self.upper_range_guide], [self.lower_range_tree, self.upper_range_tree], [self.lower_range_hand, self.upper_range_hand]]
+        ranges = [[self.lower_range_guide, self.upper_range_guide], [self.lower_range_tree, self.upper_range_tree],
+                  [self.lower_range_hand, self.upper_range_hand]]
         ret, self.frames = self.cap.update(ranges=ranges, go_left_size=self.distance)
         if ret:
             if self.current_output > 3:
@@ -222,8 +217,7 @@ class App:
                 frame = cv2.resize(frame, (int(frame.shape[1] * 2), int(frame.shape[0] * 2)))
                 self.photo = PIL.ImageTk.PhotoImage(master=self.canvas, image=PIL.Image.fromarray(frame))
                 self.canvas.create_image(0, 0, image=self.photo, anchor=tkinter.NW)
-        self.read_serial()
-        self.send_serial()
+
         self.window.after(self.delay, self.update)
 
     def read_defaults(self):
@@ -332,5 +326,43 @@ class App:
         textFile.close()
 
 
+class Client(WebSocketClient):
+    def opened(self):
+        print("Websocket open")
+
+    def closed(self, code, reason=None):
+        print("Connexion closed down", code, reason)
+
+    def received_message(self, m):
+        print(m)
+
+
+def set_connection(cap):
+    esp8266host = "ws://192.168.2.44:81/"
+    ws = Client(esp8266host)
+    ws.connect()
+
+    while True:
+        send_string = ""
+        if cap.turn_around is True:
+            send_string = "E\n"
+            cap.turn_around = False
+            print("End detected from stuff")
+        elif cap.tree_detected is True:
+            print("Tree found from stuff")
+            send_string = "T\n"
+        else:
+            send_string = "D{}\n".format(cap.direction)
+        ws.send(send_string)
+        send_string = send_string.rstrip("\n")
+        print(f'{send_string}\r', end="")
+        time.sleep(.20)
+
+
+Vision = VisionHandler(0)
+t = Thread(target=set_connection, args=(Vision,))
+t.start()
+
+
 # Create a window and pass it to the Application object
-App(tkinter.Tk(), "Tkinter and OpenCV")
+App(tkinter.Tk(), "Tkinter and OpenCV", Vision)

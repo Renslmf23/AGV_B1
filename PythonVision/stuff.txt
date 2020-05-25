@@ -37,3 +37,40 @@
             self.upper_range = np.array(
                 [int(upper_range_default[0]), int(upper_range_default[1]), int(upper_range_default[2])])
             textFile.close()
+
+
+                    if self.wait_on_command is False:
+            if self.cap.tree_detected:
+                self.tree_detected_count += 1
+                self.end_reached_count = 0
+
+            elif self.cap.turn_around:
+                self.end_reached_count += 1
+                self.tree_detected_count = 0
+            else:
+                send_string = "D{}\n".format(self.cap.direction)
+                self.arduino.write(send_string.encode())
+                print(self.cap.direction)
+                self.tree_detected_count = 0
+                self.end_reached_count = 0
+
+            if self.tree_detected_count > 5:
+                send_string = "T\n"
+                self.arduino.write(b'T\n')
+                self.cap.tree_detected = False
+                self.wait_on_command = True
+                print("Tree found")
+                self.tree_detected_count = 0
+            elif self.end_reached_count > 5:
+                send_string = "E\n"
+                self.arduino.write(b'E\n')
+                self.cap.turn_around = False
+                self.wait_on_command = True
+                print("Turn around")
+                self.end_reached_count = 0
+        else:
+            send_string = "D{}\n".format(self.cap.direction)
+            self.arduino.write(send_string.encode())
+            print(self.cap.direction)
+            self.tree_detected_count = 0
+            self.end_reached_count = 0
