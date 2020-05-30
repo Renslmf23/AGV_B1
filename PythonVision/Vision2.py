@@ -138,26 +138,19 @@ class VisionHandler:
 
     def go_left(self):
         self.direction = 1
-        # print("Go left")
 
     def go_right(self):
         self.direction = -1
-        # print("Go right")
 
     def tree_found(self):
-        if self.can_see_trees:
+        if self.can_see_trees and self.turn_around is False:
             self.tree_detected = True
             self.can_see_trees = False
-            print("Tree found")
 
     def end_reached(self):
-        if self.can_see_end:
-            print("End reached")
+        if self.can_see_end and self.time_at_last_detection < time.time():
             self.turn_around = True
             self.can_see_end = False
-
-
-        # print("Turn around")
-
+            self.time_at_last_detection = time.time() + 5
 
 VisionHandler(video_source=0)

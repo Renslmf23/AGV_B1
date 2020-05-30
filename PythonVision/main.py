@@ -23,12 +23,14 @@ def hsvtorgb(hsv):
     rgbColor = [int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255)]
     return rgbColor
 
+send_from_gui = ""
 
 class App:
     settingsOpen = False
     wait_on_command = False
     end_reached_count = 0
     tree_detected_count = 0
+    follow = False
 
     def __init__(self, window, window_title, capture, video_source=0):
         self.window = window
@@ -49,8 +51,6 @@ class App:
         view_menu.add_command(label="view vision", command=lambda *args: self.select_output(3))
         view_menu.add_separator()
         view_menu.add_command(label="view all", command=lambda *args: self.select_output(4))
-        view_menu.add_separator()
-        view_menu.add_command(label="view data", command=self.open_variables)
 
         edit_menu = tkinter.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label="Edit", menu=edit_menu)
@@ -59,6 +59,9 @@ class App:
         edit_menu.add_command(label="Exit", command=self.quit)
         self.window.config(menu=self.menubar)
 
+        control_menu = tkinter.Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(label="Controls", menu=control_menu)
+        control_menu.add_command(label="view controls", command=self.open_controls)
         # Create a canvas that can fit the above video source size
         self.canvas = tkinter.Canvas(window, width=self.cap.width * 2, height=self.cap.height * 2)
         self.canvas.pack()
@@ -91,11 +94,32 @@ class App:
     def quit(self):
         self.window.destroy()
 
-    def open_variables(self):
+    def open_controls(self):
         self.variables = tkinter.Toplevel()
-        self.variables.wm_title("Values")
+        self.variables.wm_title("controls")
         self.variables.minsize(width=400, height=400)
+        if self.follow is False:
+            follow_button = tkinter.Button(self.variables, text="Follow", command=self.set_follow)
+        else:
+            follow_button = tkinter.Button(self.variables, text="Unfollow", command=self.set_follow)
+        drive_button = tkinter.Button(self.variables, text="Drive", command=lambda *args: self.set_state("d\n"))
+        drive_button.pack()
+        follow_button.pack()
         self.variables.lift()
+
+    def set_follow(self):
+        global send_from_gui
+        if self.follow is False:
+            self.follow = True
+            send_from_gui = "F\n"
+        else:
+            self.follow = False
+            send_from_gui = "f\n"
+
+    def set_state(self, state):
+        print(state)
+        global send_from_gui
+        send_from_gui = state
 
     def color_picker_min(self, frame):
         if frame == 0:
@@ -326,6 +350,9 @@ class App:
         textFile.close()
 
 
+tree_completed = False
+edge_completed = False
+
 class Client(WebSocketClient):
     def opened(self):
         print("Websocket open")
@@ -334,29 +361,64 @@ class Client(WebSocketClient):
         print("Connexion closed down", code, reason)
 
     def received_message(self, m):
-        print(m)
+        global tree_completed
+        global edge_completed
+        if "DE" in str(m):
+            print("Edge completed")
+            edge_completed = True
+        elif "DT" in str(m):
+            print("Tree completed")
+            tree_completed = True
+        print("Serial send: {}".format(m))
 
 
 def set_connection(cap):
-    esp8266host = "ws://192.168.2.44:81/"
+    esp8266host = "ws://192.168.2.59:81/"
     ws = Client(esp8266host)
     ws.connect()
-
+    started_turn = False
     while True:
         send_string = ""
-        if cap.turn_around is True:
+        global tree_completed
+        global edge_completed
+        global send_from_gui
+
+        if tree_completed:
+            cap.can_see_trees = True
+            tree_completed = False
+        elif edge_completed:
+            print("We can see again!")
+            cap.can_see_end = True
+            edge_completed = False
+            send_string = "c\n"
+            started_turn = False
+            # cap.turn_around = False
+        elif cap.turn_around is True:
             send_string = "E\n"
             cap.turn_around = False
+            edge_completed = False
+            started_turn = True
             print("End detected from stuff")
+            print(send_string)
         elif cap.tree_detected is True:
             print("Tree found from stuff")
             send_string = "T\n"
+            tree_completed = False
+            cap.tree_detected = False
+            print(send_string)
+
+        elif send_from_gui is not "":
+            send_string = send_from_gui
+            send_from_gui = ""
+            print(send_string)
         else:
             send_string = "D{}\n".format(cap.direction)
+            print_string = send_string.rstrip("\n")
+            #print(f'{print_string}\r', end="")
         ws.send(send_string)
-        send_string = send_string.rstrip("\n")
-        print(f'{send_string}\r', end="")
+
         time.sleep(.20)
+
 
 
 Vision = VisionHandler(0)
@@ -365,4 +427,4 @@ t.start()
 
 
 # Create a window and pass it to the Application object
-App(tkinter.Tk(), "Tkinter and OpenCV", Vision)
+App(tkinter.Tk(), "AGV Command center", Vision)

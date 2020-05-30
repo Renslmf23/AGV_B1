@@ -1,5 +1,5 @@
 DO NOT MODIFY THIS FILE UNLESS YOU KNOW WHAT YOU ARE DOING! 
-Lower range guide: 85, 79, 179 
+Lower range guide: 89, 64, 75 
 Upper range guide: 150, 255, 255 
 Distance: 53 
 Lower range tree: 66, 66, 81 
