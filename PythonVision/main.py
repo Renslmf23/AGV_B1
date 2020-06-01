@@ -11,6 +11,8 @@ import os
 from ws4py.client.threadedclient import WebSocketClient
 from threading import *
 
+import speech_recognition as sr
+
 
 def rgbtohsv(rgb):
     hsv = colorsys.rgb_to_hsv(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255)
@@ -23,7 +25,9 @@ def hsvtorgb(hsv):
     rgbColor = [int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255)]
     return rgbColor
 
+
 send_from_gui = ""
+
 
 class App:
     settingsOpen = False
@@ -117,7 +121,6 @@ class App:
             send_from_gui = "f\n"
 
     def set_state(self, state):
-        print(state)
         global send_from_gui
         send_from_gui = state
 
@@ -215,7 +218,6 @@ class App:
 
         if ret:
             cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", frame[4])
-
 
     def update(self):
         # Get a frame from the video source
@@ -353,6 +355,8 @@ class App:
 tree_completed = False
 edge_completed = False
 
+send_from_voice = ""
+
 class Client(WebSocketClient):
     def opened(self):
         print("Websocket open")
@@ -382,42 +386,81 @@ def set_connection(cap):
         global tree_completed
         global edge_completed
         global send_from_gui
-
+        global send_from_voice
+        send_confirmation = False
         if tree_completed:
             cap.can_see_trees = True
             tree_completed = False
+            send_confirmation = True
         elif edge_completed:
             print("We can see again!")
             cap.can_see_end = True
             edge_completed = False
-            send_string = "c\n"
             started_turn = False
+            send_confirmation = True
             # cap.turn_around = False
-        elif cap.turn_around is True:
-            send_string = "E\n"
-            cap.turn_around = False
-            edge_completed = False
-            started_turn = True
-            print("End detected from stuff")
-            print(send_string)
-        elif cap.tree_detected is True:
-            print("Tree found from stuff")
-            send_string = "T\n"
-            tree_completed = False
-            cap.tree_detected = False
-            print(send_string)
+        if started_turn is False:
+            if cap.turn_around is True:
+                send_string = "E\n"
+                cap.turn_around = False
+                edge_completed = False
+                started_turn = True
+                print("End detected from stuff")
 
-        elif send_from_gui is not "":
-            send_string = send_from_gui
-            send_from_gui = ""
-            print(send_string)
-        else:
-            send_string = "D{}\n".format(cap.direction)
-            print_string = send_string.rstrip("\n")
-            #print(f'{print_string}\r', end="")
-        ws.send(send_string)
+            elif cap.tree_detected is True:
+                print("Tree found from stuff")
+                send_string = "T\n"
+                tree_completed = False
+                cap.tree_detected = False
+            elif send_from_gui is not "":
+                send_string = send_from_gui
+                send_from_gui = ""
+            elif send_from_voice is not "":
+                send_string = send_from_voice
+                send_from_voice = ""
+            elif send_confirmation:
+                send_string = "c\n"
+            else:
+                send_string = "D{}\n".format(cap.direction)
 
-        time.sleep(.20)
+            if ("D" in send_string) is False:
+                print("Send: ", send_string)
+
+            ws.send(send_string)
+            time.sleep(.20)
+
+
+def audio_main():
+    r = sr.Recognizer()
+    while True:
+        with sr.Microphone() as source:
+            # wait for a second to let the recognizer adjust the
+            # energy threshold based on the surrounding noise level
+            r.adjust_for_ambient_noise(source)
+            print("Say Something")
+            # listens for the user's input
+            audio = r.listen(source)
+
+            try:
+                text = r.recognize_google(audio)
+                print("you said: " + text)
+                global send_from_voice
+                if "start" in text:
+                    send_from_voice = "S\n"
+                elif "follow" in text:
+                    send_from_voice = "F\n"
+                elif "stop" in text:
+                    send_from_voice = "S\n"
+                elif "drive" in text:
+                    send_from_voice = "d\n"
+
+                # error occurs when google could not understand what was said
+
+            except sr.UnknownValueError:
+                print("Google Speech Recognition could not understand audio")
+
+            except sr.RequestError as e:
+                print("Could not request results from Google Speech Recognition service;{0}".format(e))
 
 
 
@@ -425,6 +468,8 @@ Vision = VisionHandler(0)
 t = Thread(target=set_connection, args=(Vision,))
 t.start()
 
+# audio_handler = Thread(target=audio_main)
+# audio_handler.start()
 
 # Create a window and pass it to the Application object
 App(tkinter.Tk(), "AGV Command center", Vision)

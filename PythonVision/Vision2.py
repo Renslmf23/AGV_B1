@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import time
+import math
 
 # Uses the first line of the camera image to determine whether we should go left or right. Camera is angled and pointed forward, at a slight height above the ground
 
@@ -32,6 +33,8 @@ class VisionHandler:
 
     time_at_last_detection = 0
 
+    angle = 0
+
     def __init__(self, video_source=0):
         # Open the video source
         self.cap = cv2.VideoCapture(video_source)
@@ -58,9 +61,7 @@ class VisionHandler:
             rgb = self.normalize_colors(rgb)
             thresh = self.find_edge(rgb)
             trees = self.find_tree(rgb, frame)
-            hand = self.find_hand(rgb, frame)
-
-            return True, [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), thresh, trees, rgb, frame]
+            return True, [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), thresh, trees, frame, frame]
         else:
             return False, None
 
@@ -75,11 +76,34 @@ class VisionHandler:
         mask = cv2.GaussianBlur(mask, (11, 11), cv2.BORDER_DEFAULT)  # blur the mask for better reading
         success, thresh = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
         self.distance_to_guide = mask.shape[0]
-        for line in range(frame.shape[0] - 1, 0, -1):
-            # check if the first line is white
-            if thresh[line, 50] > 0:
-                self.distance_to_guide = 480 - line
-                break
+        distances = []
+
+        first_y = -1
+        for x in range(1, 361, 30):
+            for line in range(frame.shape[0] - 1, self.end_reached_size - x, -1):
+                # check if the first line is white
+                if thresh[line, x] > 0:
+                    dist = 480-line
+
+                    if first_y == -1:
+                        first_y = dist
+                    distances.append(dist - first_y)
+                    break
+        if len(distances) >= 2 and self.time_at_last_detection - 4 < time.time(): #wait at least a second before stopping turn
+            averageDeltaY = 0
+            for i in range(1, len(distances)):
+                averageDeltaY += distances[i] - distances[i-1]
+            averageDeltaY /= len(distances)
+            averageDelta = averageDeltaY/(360/len(distances))
+            self.angle = math.atan(averageDelta)
+            self.angle = self.angle * 57
+            if 13.0 > self.angle > 15.0:
+                print("Stop turning")
+            # self.distance_to_guide = sum(distances)/len(distances)
+
+        self.distance_to_guide = first_y
+        # print(f'{self.angle}\r', end="")
+
         if self.go_left_size < self.distance_to_guide < self.end_reached_size:
             self.go_left()
         elif self.distance_to_guide <= self.go_left_size:
@@ -116,26 +140,6 @@ class VisionHandler:
 
         return thresh
 
-    def find_hand(self, frame, draw_frame):
-        hsv = cv2.cvtColor(frame, cv2.cv2.COLOR_BGR2HSV)  # convert the frame to HSV color space
-        mask = cv2.inRange(hsv, self.m_lower_range_hand, self.m_upper_range_hand)
-        mask = cv2.GaussianBlur(mask, (11, 11), cv2.BORDER_DEFAULT)  # blur the mask for better reading
-        success, thresh = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
-        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE,
-                                               cv2.CHAIN_APPROX_SIMPLE)  # calculate the contours
-        hand = []
-        for i in range(len(contours)):  # loop trough all contours
-            c = contours[i]
-            if cv2.contourArea(c) <= 10000:  # discard contour if its too small
-                continue
-            else:
-                # create a rectangle from the contour
-                rect = cv2.minAreaRect(c)
-                box = cv2.boxPoints(rect)
-                box = np.int0(box)
-                cv2.drawContours(draw_frame, [box], 0, (100, 90, 90), 2)
-        return thresh
-
     def go_left(self):
         self.direction = 1
 
@@ -152,5 +156,7 @@ class VisionHandler:
             self.turn_around = True
             self.can_see_end = False
             self.time_at_last_detection = time.time() + 5
+        else:
+            self.go_left()
 
 VisionHandler(video_source=0)
