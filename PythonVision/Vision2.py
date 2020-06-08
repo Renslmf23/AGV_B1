@@ -28,6 +28,8 @@ class VisionHandler:
 
     can_see_trees = True
     can_see_end = True
+    stop_turning = False
+    do_stop_check = False
 
     distance_to_guide = 0
 
@@ -84,25 +86,28 @@ class VisionHandler:
                 # check if the first line is white
                 if thresh[line, x] > 0:
                     dist = 480-line
-
-                    if first_y == -1:
-                        first_y = dist
-                    distances.append(dist - first_y)
+                    if line > 1:
+                        if first_y == -1:
+                            first_y = dist
+                        distances.append(dist - first_y)
                     break
-        if len(distances) >= 2 and self.time_at_last_detection - 4 < time.time(): #wait at least a second before stopping turn
+        if len(distances) >= 2 and self.time_at_last_detection + 0.8 < time.time(): #wait at least a second before stopping turn
             averageDeltaY = 0
             for i in range(1, len(distances)):
                 averageDeltaY += distances[i] - distances[i-1]
             averageDeltaY /= len(distances)
             averageDelta = averageDeltaY/(360/len(distances))
-            self.angle = math.atan(averageDelta)
-            self.angle = self.angle * 57
-            if 13.0 > self.angle > 15.0:
-                print("Stop turning")
+            new_angle = math.atan(averageDelta)
+            self.angle = self.angle * 0.5 + new_angle * 57 * 0.5
+            if 13.0 < self.angle < 15.0 and self.do_stop_check:
+                self.stop_turning = True
+                print("Stop turning", self.angle)
+            if self.do_stop_check is False:
+                self.stop_turning = False
             # self.distance_to_guide = sum(distances)/len(distances)
 
         self.distance_to_guide = first_y
-        # print(f'{self.angle}\r', end="")
+        print(f'{self.angle}\r', end="")
 
         if self.go_left_size < self.distance_to_guide < self.end_reached_size:
             self.go_left()
@@ -124,7 +129,7 @@ class VisionHandler:
         trees = []
         for i in range(len(contours)):  # loop trough all contours
             c = contours[i]
-            if cv2.contourArea(c) <= 300:  # discard contour if its too small
+            if cv2.contourArea(c) <= 3000:  # discard contour if its too small
                 continue
             else:
                 # create a rectangle from the contour
@@ -147,15 +152,15 @@ class VisionHandler:
         self.direction = -1
 
     def tree_found(self):
-        if self.can_see_trees and self.turn_around is False:
+        if self.can_see_trees and self.turn_around is False and self.time_at_last_detection + 3 < time.time() and self.can_see_end:
             self.tree_detected = True
             self.can_see_trees = False
 
     def end_reached(self):
-        if self.can_see_end and self.time_at_last_detection < time.time():
+        if self.can_see_end and self.time_at_last_detection + 5 < time.time():
             self.turn_around = True
             self.can_see_end = False
-            self.time_at_last_detection = time.time() + 5
+            self.time_at_last_detection = time.time()
         else:
             self.go_left()
 

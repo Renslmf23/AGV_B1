@@ -193,8 +193,9 @@ class App:
                                                   command=lambda *args: self.color_picker_min(2))
             max_range_color_hand = tkinter.Button(self.settings, text="max range hand",
                                                   command=lambda *args: self.color_picker_max(2))
-            min_range_color_hand.grid(column=0, row=2)
-            max_range_color_hand.grid(column=1, row=2)
+            # min_range_color_hand.grid(column=0, row=2)
+            # max_range_color_hand.grid(column=1, row=2)
+
 
             reset_button = tkinter.Button(self.settings, text="Reset defaults", command=self.reset_defaults)
             reset_button.grid(column=0, row=3)
@@ -398,6 +399,7 @@ def set_connection(cap):
             edge_completed = False
             started_turn = False
             send_confirmation = True
+            cap.do_stop_check = False
             # cap.turn_around = False
         if started_turn is False:
             if cap.turn_around is True:
@@ -405,8 +407,8 @@ def set_connection(cap):
                 cap.turn_around = False
                 edge_completed = False
                 started_turn = True
+                cap.do_stop_check = True
                 print("End detected from stuff")
-
             elif cap.tree_detected is True:
                 print("Tree found from stuff")
                 send_string = "T\n"
@@ -414,6 +416,11 @@ def set_connection(cap):
                 cap.tree_detected = False
             elif send_from_gui is not "":
                 send_string = send_from_gui
+                if send_from_gui is "d\n":
+                    started_turn = False
+                    cap.can_see_end = True
+                    cap.turn_around = False
+                    cap.tree_detected = False
                 send_from_gui = ""
             elif send_from_voice is not "":
                 send_string = send_from_voice
@@ -422,12 +429,26 @@ def set_connection(cap):
                 send_string = "c\n"
             else:
                 send_string = "D{}\n".format(cap.direction)
-
-            if ("D" in send_string) is False:
-                print("Send: ", send_string)
-
+            if send_string is not "":
+                if ("D" in send_string) is False:
+                    print("Send: ", send_string)
+                ws.send(send_string)
+        elif send_from_gui is not "":
+            if "d" in send_from_gui:
+                started_turn = False
+                cap.can_see_end = True
+                cap.turn_around = False
+                cap.tree_detected = False
+            send_string = send_from_gui
+            send_from_gui = ""
             ws.send(send_string)
-            time.sleep(.20)
+
+        elif cap.stop_turning:
+            send_string = "t\n"
+            cap.do_stop_check = False
+            cap.stop_turning = False
+            ws.send(send_string)
+        time.sleep(0.1)
 
 
 def audio_main():
