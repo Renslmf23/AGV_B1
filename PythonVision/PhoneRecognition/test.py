@@ -19,8 +19,9 @@ def calc_plot_data(duration, f, phase, fsample, number):
         elif number == -1:
             f_alias = -f
         else:
-            f_alias = (floor(number / 2) + 1) * fsample + (-1 * f if number % 2 == 1 else f)
-        phase_alias = pi-phase if number % 2 == 1 else phase
+            f_alias = (floor((number + (1 if number > 0 else 0)) / 2)) * fsample + (-1 * f if number % 2 == 1 else f)
+        phase_alias = (number % 2 * pi)-phase
+        print(phase_alias)
         x_alias = np.sin(2 * pi * f_alias * t + phase_alias)
         return x_alias, f_alias
 
