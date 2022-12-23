@@ -183,7 +183,7 @@ def sim(A,B,C,D,u,x0=None,return_X=False):
     if return_X:
         if reshape_state:
             x = np.reshape(x,(N))
-        return y,x
+        return zip(y,x)
     else:
         return y
 
